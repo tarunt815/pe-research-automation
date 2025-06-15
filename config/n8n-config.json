@@ -1,0 +1,51 @@
+{
+  "database": {
+    "type": "postgresdb",
+    "postgresdb": {
+      "host": "localhost",
+      "port": 5432,
+      "database": "pe_research",
+      "schema": "public"
+    }
+  },
+  "credentials": {
+    "overwrite": {
+      "data": "ask"
+    }
+  },
+  "workflows": {
+    "default": {
+      "active": false,
+      "settings": {
+        "callerPolicy": "workflowsFromSameOwner",
+        "executionOrder": "v1"
+      }
+    }
+  },
+  "nodes": {
+    "communityPackages": {
+      "enabled": true,
+      "registry": "https://www.npmjs.com/"
+    }
+  },
+  "logs": {
+    "level": "info",
+    "outputs": ["console", "file"],
+    "file": {
+      "fileCountMax": 100,
+      "fileSizeMax": 16
+    }
+  },
+  "executions": {
+    "mode": "regular",
+    "timeout": 3600,
+    "maxTimeout": 3600,
+    "saveDataOnError": "all",
+    "saveDataOnSuccess": "all",
+    "saveDataManualExecutions": true
+  },
+  "security": {
+    "restrictFileSystemAccess": true,
+    "blockPrivateNetworkAccess": false
+  }
+}

@@ -1,0 +1,160 @@
+{
+  "name": "Database Setup - Research Reports",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Database Setup for Research Reports\n\nThis workflow creates all necessary tables for the flexible research report system.\n\n**Before running:**\n1. Create a PostgreSQL database named `research_reports`\n2. Configure PostgreSQL credentials in n8n\n3. Run this workflow once\n\n**After running:**\n- Import the Report Generator workflow\n- Import and clone the Master Template for each topic",
+        "height": 300,
+        "width": 450
+      },
+      "id": "instructions",
+      "name": "Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [200, 200]
+    },
+    {
+      "parameters": {},
+      "id": "manual",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [400, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Create report configurations table\nCREATE TABLE IF NOT EXISTS report_configs (\n    id SERIAL PRIMARY KEY,\n    report_name VARCHAR(255) UNIQUE NOT NULL,\n    topic VARCHAR(255) NOT NULL,\n    keywords TEXT[],\n    email_senders TEXT[],\n    report_structure JSONB,\n    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n    is_active BOOLEAN DEFAULT TRUE\n);\n\n-- Create index\nCREATE INDEX IF NOT EXISTS idx_report_configs_active ON report_configs(is_active);",
+        "options": {}
+      },
+      "id": "create_configs",
+      "name": "Create Report Configs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.2,
+      "position": [600, 400],
+      "credentials": {
+        "postgres": {
+          "id": "{{postgresCredentialId}}",
+          "name": "Research DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Create processed content table\nCREATE TABLE IF NOT EXISTS processed_content (\n    id SERIAL PRIMARY KEY,\n    report_config_id INTEGER REFERENCES report_configs(id),\n    source_type VARCHAR(50),\n    source_id VARCHAR(255),\n    source_date TIMESTAMP,\n    source_metadata JSONB,\n    extracted_data JSONB,\n    processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n    processing_version VARCHAR(20) DEFAULT '1.0',\n    UNIQUE(report_config_id, source_id)\n);\n\n-- Create indexes\nCREATE INDEX IF NOT EXISTS idx_content_report_date ON processed_content(report_config_id, source_date);\nCREATE INDEX IF NOT EXISTS idx_content_search ON processed_content USING gin(to_tsvector('english', source_metadata || ' ' || extracted_data));",
+        "options": {}
+      },
+      "id": "create_content",
+      "name": "Create Content Table",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.2,
+      "position": [800, 400],
+      "credentials": {
+        "postgres": {
+          "id": "{{postgresCredentialId}}",
+          "name": "Research DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Create insights table\nCREATE TABLE IF NOT EXISTS insights (\n    id SERIAL PRIMARY KEY,\n    report_config_id INTEGER REFERENCES report_configs(id),\n    content_id INTEGER REFERENCES processed_content(id),\n    insight_type VARCHAR(100),\n    title TEXT,\n    summary TEXT,\n    detailed_data JSONB,\n    importance_score DECIMAL(3,2),\n    tags TEXT[],\n    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n);\n\n-- Create indexes\nCREATE INDEX IF NOT EXISTS idx_insights_report_type ON insights(report_config_id, insight_type);\nCREATE INDEX IF NOT EXISTS idx_insights_importance ON insights(importance_score DESC);\nCREATE INDEX IF NOT EXISTS idx_insights_search ON insights USING gin(to_tsvector('english', title || ' ' || summary));",
+        "options": {}
+      },
+      "id": "create_insights",
+      "name": "Create Insights Table",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.2,
+      "position": [1000, 400],
+      "credentials": {
+        "postgres": {
+          "id": "{{postgresCredentialId}}",
+          "name": "Research DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Create weekly reports table\nCREATE TABLE IF NOT EXISTS weekly_reports (\n    id SERIAL PRIMARY KEY,\n    report_config_id INTEGER REFERENCES report_configs(id),\n    week_start DATE,\n    week_end DATE,\n    executive_summary TEXT,\n    report_sections JSONB,\n    statistics JSONB,\n    pdf_url TEXT,\n    email_sent BOOLEAN DEFAULT FALSE,\n    sent_at TIMESTAMP,\n    recipients TEXT[],\n    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n);\n\n-- Create index\nCREATE INDEX IF NOT EXISTS idx_reports_week ON weekly_reports(report_config_id, week_start);",
+        "options": {}
+      },
+      "id": "create_reports",
+      "name": "Create Reports Table",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.2,
+      "position": [1200, 400],
+      "credentials": {
+        "postgres": {
+          "id": "{{postgresCredentialId}}",
+          "name": "Research DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Insert example configurations\nINSERT INTO report_configs (report_name, topic, keywords, report_structure) VALUES\n(\n    'AI & Technology Research',\n    'Artificial Intelligence',\n    ARRAY['AI', 'machine learning', 'LLM', 'GPT', 'Claude', 'OpenAI', 'Anthropic', 'DeepMind', 'funding', 'acquisition'],\n    '{\n        \"sections\": [\n            {\"name\": \"AI Market Trends\", \"type\": \"insights\", \"filter\": \"trend\"},\n            {\"name\": \"Funding & Acquisitions\", \"type\": \"insights\", \"filter\": \"funding\"},\n            {\"name\": \"Technology Breakthroughs\", \"type\": \"insights\", \"filter\": \"technology\"},\n            {\"name\": \"Key Players\", \"type\": \"companies\"}\n        ]\n    }'::jsonb\n),\n(\n    'Healthcare Investment Tracker',\n    'Healthcare & Biotech',\n    ARRAY['healthcare', 'biotech', 'medtech', 'FDA', 'clinical trial', 'pharma', 'therapeutics', 'IPO', 'M&A'],\n    '{\n        \"sections\": [\n            {\"name\": \"Regulatory Updates\", \"type\": \"insights\", \"filter\": \"regulatory\"},\n            {\"name\": \"Deal Activity\", \"type\": \"insights\", \"filter\": \"deals\"},\n            {\"name\": \"Clinical Progress\", \"type\": \"insights\", \"filter\": \"clinical\"},\n            {\"name\": \"Market Analysis\", \"type\": \"insights\", \"filter\": \"market\"}\n        ]\n    }'::jsonb\n)\nON CONFLICT (report_name) DO NOTHING;\n\nSELECT 'Database setup complete!' as status, COUNT(*) as tables_created FROM pg_tables WHERE schemaname = 'public';",
+        "options": {}
+      },
+      "id": "seed_data",
+      "name": "Add Sample Configs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.2,
+      "position": [1400, 400],
+      "credentials": {
+        "postgres": {
+          "id": "{{postgresCredentialId}}",
+          "name": "Research DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "=✅ Database Setup Complete!\n\nTables created:\n- report_configs\n- processed_content  \n- insights\n- weekly_reports\n\nSample configurations added:\n- AI & Technology Research\n- Healthcare Investment Tracker\n\nNext steps:\n1. Import the Report Generator workflow\n2. Import the Master Template workflow\n3. Clone and configure for your topics"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "success",
+      "name": "Success Message",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [1600, 400]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [[{"node": "Create Report Configs", "type": "main", "index": 0}]]
+    },
+    "Create Report Configs": {
+      "main": [[{"node": "Create Content Table", "type": "main", "index": 0}]]
+    },
+    "Create Content Table": {
+      "main": [[{"node": "Create Insights Table", "type": "main", "index": 0}]]
+    },
+    "Create Insights Table": {
+      "main": [[{"node": "Create Reports Table", "type": "main", "index": 0}]]
+    },
+    "Create Reports Table": {
+      "main": [[{"node": "Add Sample Configs", "type": "main", "index": 0}]]
+    },
+    "Add Sample Configs": {
+      "main": [[{"node": "Success Message", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "db-setup-v1",
+  "id": "DBSetup001",
+  "tags": ["setup", "database"]
+}

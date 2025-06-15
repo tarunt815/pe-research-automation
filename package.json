@@ -1,0 +1,30 @@
+{
+  "name": "pe-research-automation",
+  "version": "1.0.0",
+  "description": "PE Research Automation System for n8n",
+  "scripts": {
+    "setup": "node scripts/setup.js",
+    "deploy:all": "node scripts/deploy-all.js",
+    "deploy:workflow": "node scripts/deploy-workflow.js",
+    "backup": "node scripts/backup.js",
+    "restore": "node scripts/restore.js",
+    "validate": "node scripts/validate.js",
+    "sync:pull": "node scripts/sync.js pull",
+    "sync:push": "node scripts/sync.js push",
+    "test": "jest",
+    "monitor": "node scripts/monitor.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "dotenv": "^16.0.0",
+    "pg": "^8.11.0",
+    "chalk": "^4.1.2",
+    "inquirer": "^8.2.5",
+    "fs-extra": "^11.1.0"
+  },
+  "devDependencies": {
+    "jest": "^29.5.0",
+    "prettier": "^3.0.0",
+    "eslint": "^8.0.0"
+  }
+}

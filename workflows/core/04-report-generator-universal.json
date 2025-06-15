@@ -1,0 +1,195 @@
+{
+    "name": "Report Generator - Universal",
+    "nodes": [
+      {
+        "parameters": {
+          "path": "generate-report",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "a1234567-8901-2345-6789-012345678901",
+        "name": "Webhook Trigger",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [200, 400],
+        "webhookId": "report-generator"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "-- Get report configuration and stats\nWITH report_stats AS (\n  SELECT \n    rc.id,\n    rc.report_name,\n    rc.topic,\n    rc.keywords,\n    COUNT(DISTINCT pc.id) as content_processed,\n    COUNT(DISTINCT i.id) as insights_generated,\n    AVG(i.importance_score) as avg_importance\n  FROM report_configs rc\n  LEFT JOIN processed_content pc ON rc.id = pc.report_config_id\n    AND pc.source_date >= '{{ $json.body.weekStart }}'\n    AND pc.source_date <= '{{ $json.body.weekEnd }}'\n  LEFT JOIN insights i ON rc.id = i.report_config_id\n    AND i.created_at >= '{{ $json.body.weekStart }}'\n    AND i.created_at <= '{{ $json.body.weekEnd }}'\n  WHERE rc.id = {{ $json.body.reportConfigId }}\n  GROUP BY rc.id, rc.report_name, rc.topic, rc.keywords\n)\nSELECT * FROM report_stats;",
+          "options": {}
+        },
+        "id": "b2345678-9012-3456-7890-123456789012",
+        "name": "Get Report Config",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.2,
+        "position": [400, 400],
+        "credentials": {
+          "postgres": {
+            "id": "{{postgresCredentialId}}",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "-- Get top insights for the week\nSELECT \n  i.id,\n  i.insight_type,\n  i.title,\n  i.summary,\n  i.importance_score,\n  i.tags,\n  i.detailed_data,\n  pc.source_metadata,\n  pc.source_date\nFROM insights i\nJOIN processed_content pc ON i.content_id = pc.id\nWHERE i.report_config_id = {{ $('Get Report Config').item.json.id }}\n  AND i.created_at >= '{{ $json.body.weekStart }}'\n  AND i.created_at <= '{{ $json.body.weekEnd }}'\nORDER BY i.importance_score DESC, i.created_at DESC\nLIMIT 20;",
+          "options": {}
+        },
+        "id": "c3456789-0123-4567-8901-234567890123",
+        "name": "Get Top Insights",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.2,
+        "position": [600, 300],
+        "credentials": {
+          "postgres": {
+            "id": "{{postgresCredentialId}}",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "-- Get insights grouped by type\nSELECT \n  insight_type,\n  COUNT(*) as count,\n  AVG(importance_score) as avg_importance,\n  array_agg(\n    json_build_object(\n      'title', title,\n      'summary', summary,\n      'score', importance_score\n    ) ORDER BY importance_score DESC\n  ) as insights\nFROM insights\nWHERE report_config_id = {{ $('Get Report Config').item.json.id }}\n  AND created_at >= '{{ $json.body.weekStart }}'\n  AND created_at <= '{{ $json.body.weekEnd }}'\nGROUP BY insight_type\nORDER BY avg_importance DESC;",
+          "options": {}
+        },
+        "id": "d4567890-1234-5678-9012-345678901234",
+        "name": "Get Insights by Type",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.2,
+        "position": [600, 500],
+        "credentials": {
+          "postgres": {
+            "id": "{{postgresCredentialId}}",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "// Aggregate all data for report\nconst config = $('Get Report Config').item.json;\nconst topInsights = $('Get Top Insights').all().map(item => item.json);\nconst insightsByType = $('Get Insights by Type').all().map(item => item.json);\n\n// Calculate executive summary points\nconst executiveSummary = [];\n\n// Add statistics\nexecutiveSummary.push(`Analyzed ${config.content_processed} pieces of content`);\nexecutiveSummary.push(`Generated ${config.insights_generated} key insights`);\n\n// Add top insight types\nif (insightsByType.length > 0) {\n  const topType = insightsByType[0];\n  executiveSummary.push(`Focus area: ${topType.insight_type} (${topType.count} insights)`);\n}\n\n// Add most important insight\nif (topInsights.length > 0) {\n  executiveSummary.push(`Key finding: ${topInsights[0].title}`);\n}\n\nreturn {\n  json: {\n    reportConfig: config,\n    weekStart: $json.body.weekStart,\n    weekEnd: $json.body.weekEnd,\n    executiveSummary,\n    topInsights,\n    insightsByType,\n    totalInsights: config.insights_generated,\n    avgImportance: config.avg_importance\n  }\n};"
+        },
+        "id": "e5678901-2345-6789-0123-456789012345",
+        "name": "Aggregate Report Data",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [800, 400]
+      },
+      {
+        "parameters": {
+          "modelId": {
+            "__rl": true,
+            "value": "gpt-4-turbo-preview",
+            "mode": "list",
+            "cachedResultName": "gpt-4-turbo-preview"
+          },
+          "messages": {
+            "values": [
+              {
+                "content": "You are preparing an executive intelligence briefing on {{ $json.reportConfig.topic }}. Create a concise, actionable report that highlights the most important developments and trends.",
+                "role": "system"
+              },
+              {
+                "content": "Create a weekly report from this data:\n\nTopic: {{ $json.reportConfig.topic }}\nPeriod: {{ $json.weekStart }} to {{ $json.weekEnd }}\nTotal Insights: {{ $json.totalInsights }}\n\nTop Insights:\n{{ JSON.stringify($json.topInsights.slice(0, 10), null, 2) }}\n\nInsights by Category:\n{{ JSON.stringify($json.insightsByType, null, 2) }}\n\nCreate a structured report with:\n1. Executive Summary (3-4 key bullets)\n2. Major Developments (organized by importance)\n3. Emerging Trends\n4. Companies/Players to Watch\n5. Action Items & Recommendations\n\nKeep it concise and focused on actionable intelligence.",
+                "role": "user"
+              }
+            ]
+          },
+          "options": {
+            "temperature": 0.7,
+            "maxTokens": 2500
+          }
+        },
+        "id": "f6789012-3456-7890-1234-567890123456",
+        "name": "Generate AI Report",
+        "type": "@n8n/n8n-nodes-langchain.openAi",
+        "typeVersion": 1.3,
+        "position": [1000, 400],
+        "credentials": {
+          "openAiApi": {
+            "id": "{{openAiCredentialId}}",
+            "name": "OpenAi account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "// Create HTML report\nconst data = $('Aggregate Report Data').item.json;\nconst aiReport = $json.response.text;\nconst config = data.reportConfig;\n\nconst html = `\n<!DOCTYPE html>\n<html>\n<head>\n  <meta charset=\"UTF-8\">\n  <style>\n    body { \n      font-family: -apple-system, Arial, sans-serif; \n      max-width: 800px; \n      margin: 40px auto; \n      line-height: 1.6;\n      color: #333;\n    }\n    .header {\n      border-bottom: 3px solid #2c5530;\n      padding-bottom: 20px;\n      margin-bottom: 30px;\n    }\n    h1 { \n      color: #1a472a; \n      margin: 0;\n      font-size: 28px;\n    }\n    .subtitle {\n      color: #666;\n      font-size: 16px;\n      margin-top: 5px;\n    }\n    .stats {\n      display: grid;\n      grid-template-columns: repeat(3, 1fr);\n      gap: 20px;\n      margin: 30px 0;\n    }\n    .stat-box {\n      background: #f8f9fa;\n      padding: 20px;\n      border-radius: 8px;\n      text-align: center;\n      border: 1px solid #e0e0e0;\n    }\n    .stat-number {\n      font-size: 32px;\n      font-weight: bold;\n      color: #1a472a;\n    }\n    .stat-label {\n      font-size: 14px;\n      color: #666;\n      margin-top: 5px;\n    }\n    .ai-content {\n      white-space: pre-wrap;\n      background: #ffffff;\n      padding: 30px;\n      border-radius: 8px;\n      border: 1px solid #e0e0e0;\n      margin: 30px 0;\n    }\n    .footer {\n      margin-top: 50px;\n      padding-top: 20px;\n      border-top: 1px solid #e0e0e0;\n      text-align: center;\n      color: #999;\n      font-size: 12px;\n    }\n    h2 {\n      color: #2c5530;\n      margin-top: 30px;\n      font-size: 20px;\n    }\n    ul {\n      margin: 10px 0;\n      padding-left: 20px;\n    }\n    li {\n      margin: 5px 0;\n    }\n  </style>\n</head>\n<body>\n  <div class=\"header\">\n    <h1>${config.report_name}</h1>\n    <div class=\"subtitle\">\n      Weekly Intelligence Report • ${new Date(data.weekStart).toLocaleDateString()} - ${new Date(data.weekEnd).toLocaleDateString()}\n    </div>\n  </div>\n  \n  <div class=\"stats\">\n    <div class=\"stat-box\">\n      <div class=\"stat-number\">${data.totalInsights}</div>\n      <div class=\"stat-label\">Key Insights</div>\n    </div>\n    <div class=\"stat-box\">\n      <div class=\"stat-number\">${config.content_processed}</div>\n      <div class=\"stat-label\">Sources Analyzed</div>\n    </div>\n    <div class=\"stat-box\">\n      <div class=\"stat-number\">${Math.round(data.avgImportance * 10)}/10</div>\n      <div class=\"stat-label\">Avg. Importance</div>\n    </div>\n  </div>\n  \n  <div class=\"ai-content\">${aiReport}</div>\n  \n  <div class=\"footer\">\n    <p>Generated by ${config.topic} Research System</p>\n    <p>${new Date().toLocaleString()}</p>\n  </div>\n</body>\n</html>`;\n\nreturn {\n  json: {\n    html: html,\n    filename: `${config.report_name.replace(/[^a-z0-9]/gi, '_')}_${data.weekStart}.pdf`,\n    reportData: data,\n    recipients: $json.body.recipients || 'team@company.com'\n  }\n};"
+        },
+        "id": "07890123-4567-8901-2345-678901234567",
+        "name": "Create HTML Report",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [1200, 400]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "-- Save report record\nINSERT INTO weekly_reports (\n  report_config_id,\n  week_start,\n  week_end,\n  executive_summary,\n  report_sections,\n  statistics,\n  recipients\n) VALUES (\n  {{ $('Aggregate Report Data').item.json.reportConfig.id }},\n  '{{ $('Aggregate Report Data').item.json.weekStart }}',\n  '{{ $('Aggregate Report Data').item.json.weekEnd }}',\n  '{{ $('Aggregate Report Data').item.json.executiveSummary.join('; ') }}',\n  '{{ JSON.stringify($('Generate AI Report').item.json.response.text) }}'::jsonb,\n  '{{ JSON.stringify({\n    total_insights: $('Aggregate Report Data').item.json.totalInsights,\n    content_processed: $('Aggregate Report Data').item.json.reportConfig.content_processed,\n    avg_importance: $('Aggregate Report Data').item.json.avgImportance\n  }) }}'::jsonb,\n  ARRAY[{{ $json.recipients.split(',').map(r => `'${r.trim()}'`).join(',') }}]\n)\nRETURNING id;",
+          "options": {}
+        },
+        "id": "18901234-5678-9012-3456-789012345678",
+        "name": "Save Report",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.2,
+        "position": [1400, 400],
+        "credentials": {
+          "postgres": {
+            "id": "{{postgresCredentialId}}",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "options": {}
+        },
+        "id": "29012345-6789-0123-4567-890123456789",
+        "name": "Respond to Webhook",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [1600, 400],
+        "responseCode": 200,
+        "responseData": "{\n  \"success\": true,\n  \"reportId\": \"{{ $('Save Report').item.json.id }}\",\n  \"message\": \"Report generated successfully\"\n}"
+      }
+    ],
+    "connections": {
+      "Webhook Trigger": {
+        "main": [[{ "node": "Get Report Config", "type": "main", "index": 0 }]]
+      },
+      "Get Report Config": {
+        "main": [[
+          { "node": "Get Top Insights", "type": "main", "index": 0 },
+          { "node": "Get Insights by Type", "type": "main", "index": 0 }
+        ]]
+      },
+      "Get Top Insights": {
+        "main": [[{ "node": "Aggregate Report Data", "type": "main", "index": 0 }]]
+      },
+      "Get Insights by Type": {
+        "main": [[{ "node": "Aggregate Report Data", "type": "main", "index": 0 }]]
+      },
+      "Aggregate Report Data": {
+        "main": [[{ "node": "Generate AI Report", "type": "main", "index": 0 }]]
+      },
+      "Generate AI Report": {
+        "main": [[{ "node": "Create HTML Report", "type": "main", "index": 0 }]]
+      },
+      "Create HTML Report": {
+        "main": [[{ "node": "Save Report", "type": "main", "index": 0 }]]
+      },
+      "Save Report": {
+        "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]]
+      }
+    },
+    "active": true,
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "versionId": "report-gen-v1",
+    "id": "ReportGenerator001",
+    "tags": ["report", "generator"]
+  }

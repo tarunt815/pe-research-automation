@@ -1,0 +1,77 @@
+{
+  "development": {
+    "database": {
+      "host": "localhost",
+      "port": 5432,
+      "name": "pe_research_dev",
+      "ssl": false
+    },
+    "n8n": {
+      "host": "localhost",
+      "port": 5678,
+      "protocol": "http"
+    },
+    "logging": {
+      "level": "debug",
+      "console": true,
+      "file": false
+    },
+    "features": {
+      "mockExternalApis": true,
+      "testDataGeneration": true
+    }
+  },
+  "staging": {
+    "database": {
+      "host": "staging-db.example.com",
+      "port": 5432,
+      "name": "pe_research_staging",
+      "ssl": true
+    },
+    "n8n": {
+      "host": "staging-n8n.example.com",
+      "port": 443,
+      "protocol": "https"
+    },
+    "logging": {
+      "level": "info",
+      "console": true,
+      "file": true
+    },
+    "features": {
+      "mockExternalApis": false,
+      "testDataGeneration": false
+    }
+  },
+  "production": {
+    "database": {
+      "host": "prod-db.example.com",
+      "port": 5432,
+      "name": "pe_research_prod",
+      "ssl": true,
+      "pool": {
+        "min": 2,
+        "max": 10
+      }
+    },
+    "n8n": {
+      "host": "n8n.example.com",
+      "port": 443,
+      "protocol": "https"
+    },
+    "logging": {
+      "level": "warn",
+      "console": false,
+      "file": true
+    },
+    "features": {
+      "mockExternalApis": false,
+      "testDataGeneration": false
+    },
+    "monitoring": {
+      "healthCheck": true,
+      "metrics": true,
+      "alerts": true
+    }
+  }
+}
