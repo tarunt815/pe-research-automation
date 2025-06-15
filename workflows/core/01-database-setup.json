@@ -42,7 +42,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Create processed content table\nCREATE TABLE IF NOT EXISTS processed_content (\n    id SERIAL PRIMARY KEY,\n    report_config_id INTEGER REFERENCES report_configs(id),\n    source_type VARCHAR(50),\n    source_id VARCHAR(255),\n    source_date TIMESTAMP,\n    source_metadata JSONB,\n    extracted_data JSONB,\n    processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n    processing_version VARCHAR(20) DEFAULT '1.0',\n    UNIQUE(report_config_id, source_id)\n);\n\n-- Create indexes\nCREATE INDEX IF NOT EXISTS idx_content_report_date ON processed_content(report_config_id, source_date);\nCREATE INDEX IF NOT EXISTS idx_content_search ON processed_content USING gin(to_tsvector('english', source_metadata || ' ' || extracted_data));",
+        "query": "-- Create processed content table\nCREATE TABLE IF NOT EXISTS processed_content (\n    id SERIAL PRIMARY KEY,\n    report_config_id INTEGER REFERENCES report_configs(id),\n    source_type VARCHAR(50),\n    source_id VARCHAR(255),\n    source_date TIMESTAMP,\n    source_metadata JSONB,\n    extracted_data JSONB,\n    processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n    processing_version VARCHAR(20) DEFAULT '1.0',\n    UNIQUE(report_config_id, source_id)\n);\n\n-- Create indexes\nCREATE INDEX IF NOT EXISTS idx_content_report_date ON processed_content(report_config_id, source_date);\nCREATE INDEX IF NOT EXISTS idx_content_search ON processed_content USING gin(to_tsvector('english', COALESCE(source_metadata::text, '') || ' ' || COALESCE(extracted_data::text, '')));",
         "options": {}
       },
       "id": "create_content",
